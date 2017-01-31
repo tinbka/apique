@@ -58,7 +58,11 @@ module Apique::Filterable
           # A call to a scope. A method must be defined as a scope to work on another ORM relation.
           collection = collection.public_send "search_by_#{k}", v
         else
-          is_text = [ActiveRecord::Type::String, ActiveRecord::Type::Text].include? resource_class.columns.find {|i| i.name == k}.cast_type
+          if ActiveRecord::VERSION::MAJOR >= 5
+            is_text = [ActiveRecord::Type::String, ActiveRecord::Type::Text].include? resource_class.columns.find {|i| i.name == k}.instance_variable_get(:@cast_type).class
+          else
+            is_text = [ActiveRecord::Type::String, ActiveRecord::Type::Text].include? resource_class.columns.find {|i| i.name == k}.cast_type
+          end
           
           if k =~ /_or_/
             fields = k.split('_or_')
