@@ -41,7 +41,7 @@ module Apique::Sortable
       end
     end
     if collection.order_values.blank?
-      collection = collection.order "id desc"
+      collection = collection.order "#{resource_class.primary_key} desc"
     end
     
     set_collection collection
