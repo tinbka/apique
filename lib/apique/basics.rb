@@ -7,8 +7,10 @@ module Apique::Basics
   
     before_action :authorize_access
     
-    rescue_from CanCan::AccessDenied do |e|
-      render json: {error: e.message}, status: :forbidden
+    if defined? CanCan
+      rescue_from CanCan::AccessDenied do |e|
+        render json: {error: e.message}, status: :forbidden
+      end
     end
     
     rescue_from NotImplementedError do |e|
@@ -39,7 +41,7 @@ module Apique::Basics
   # The plural name of the ORM class.
   # @return [String]
   def collection_name
-    @collection_name ||= params[:model]
+    @collection_name ||= params[:model] || controller_name.underscore.split('/').last
   end
 
   # The ORM class of the resource.

@@ -77,7 +77,7 @@ module Apique::Listable
   # Puts the collection into an instance variable.
   # In most cases, the collection exactly allowed for the user by CanCan rules should be an entry point.
   # @return [DB collection proxy]
-  def set_collection(collection = resource_class.accessible_by(current_ability))
+  def set_collection(collection = defined?(CanCan) ? resource_class.accessible_by(current_ability) : resource_class.all)
     instance_variable_set("@#{collection_name}", collection)
   end
   
