@@ -15,6 +15,9 @@ module Apique::Filterable
     params_types['q'] = [String, Hash]
   end
   
+  UUID_RE = /^[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$/
+  BOOL_RE = /^(true|false|t|f)$/
+  ISO8601_RE = /^\d{4}(-\d\d){2}T\d\d(:\d\d){2}(\.\d+)?Z([+-]\d\d:\d\d)?$/
   
   private
   
@@ -58,37 +61,94 @@ module Apique::Filterable
           # A call to a scope. A method must be defined as a scope to work on another ORM relation.
           collection = collection.public_send "search_by_#{k}", v
         else
-          if ActiveRecord::VERSION::MAJOR >= 5
-            is_text = [ActiveRecord::Type::String, ActiveRecord::Type::Text].include? resource_class.columns.find {|i| i.name == k}.instance_variable_get(:@cast_type).class
-          else
-            is_text = [ActiveRecord::Type::String, ActiveRecord::Type::Text].include? resource_class.columns.find {|i| i.name == k}.cast_type
+          conditions = k.split('_or_').map do |k|
+            case get_cast_type(k)
+            when :text
+              if v.is_a? Array
+                ["#{k} IN (?)", v.select(&:present?)]
+              else
+                ["#{k} ILIKE ?", "%#{v}%"]
+              end
+            when :integer
+              if v.is_a? Hash
+                [:from, :to].each {|x| v[x] &&= v[x].to_i}
+                from_to_statement(k, v)
+              elsif enum_map = resource_class.defined_enums[k.to_s]
+                if v.is_a? Array
+                  ["#{k} IN (?)", v.map {|vi| enum_map[vi]}]
+                else
+                  ["#{k} = ?", enum_map[v]]
+                end
+              else
+                if v.is_a? Array
+                  ["#{k} IN (?)", v.map(&:to_i)]
+                else
+                  ["#{k} = ?", v.to_i]
+                end
+              end
+            when :uuid
+              if v.is_a? Array
+                ["#{k} IN (?)", v.select {|vi| v =~ UUID_RE}]
+              else
+                if v =~ UUID_RE
+                  ["#{k} = ?", v]
+                end
+              end
+            when :boolean
+              if v =~ BOOL_RE
+                ["#{k} = ?", v]
+              end
+            when :datetime
+              [:from, :to].each {|x| v.delete x if v[x] !~ ISO8601_RE}
+              from_to_statement(k, v)
+            end
+          end.compact
+          
+          if conditions.blank?
+            collection = collection.none
+            break
           end
           
-          if k =~ /_or_/
-            fields = k.split('_or_')
-            
-            if is_text
-              collection = collection.where [
-                fields.map {|i| "#{i} ILIKE ?"} * ' OR ',
-                *(["%#{v}%"] * fields.size)
-              ]
-            else
-              collection = collection.where [
-                fields.map {|i| "#{i} = ?"} * ' OR ',
-                *([v] * fields.size)
-              ]
-            end
-          else
-            if is_text
-              collection = collection.where ["#{k} ILIKE ?", "%#{v}%"]
-            else
-              collection = collection.where k => v
-            end
-          end
+          collection = collection.where conditions.map(&:first)*' OR ', *conditions.map(&:last)
         end
       end
       
       set_collection collection
+    end
+  end
+  
+  if ActiveRecord::VERSION::MAJOR >= 5
+    def get_cast_type_class(field)
+      resource_class.columns.find {|i| i.name == field}.instance_variable_get(:@cast_type).class
+    end
+  else
+    def get_cast_type_class(field)
+      resource_class.columns.find {|i| i.name == field}.cast_type
+    end
+  end
+  
+  def get_cast_type(field)
+    type = get_cast_type_class(field)
+    if [ActiveModel::Type::String, ActiveModel::Type::Text].find {|k| type <= k}
+      :text
+    elsif type <= ActiveModel::Type::Integer
+      :integer
+    elsif type <= ActiveModel::Type::Boolean
+      :boolean
+    elsif type <= ActiveModel::Type::DateTime
+      :datetime
+    elsif type <= ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Uuid
+      :uuid
+    end
+  end
+  
+  def from_to_statement(k, v)
+    if v[:from].present? and v[:to].present?
+      ["#{k} BETWEEN ? AND ?", v[:from], v[:to]]
+    elsif v[:from].present?
+      ["#{k} >= ?", v[:from]]
+    elsif v[:to].present?
+      ["#{k} <= ?", v[:to]]
     end
   end
   

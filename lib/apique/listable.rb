@@ -7,9 +7,17 @@ module Apique::Listable
     # [Hash: param_key_string => {:desc, :example}]
     class_attribute :params_usage
     self.params_usage = {}
+    params_usage['f'] = {
+      desc: "f [String] serialize the collection in a specific format (optional)"
+    }
+    params_usage['j'] = {
+      desc: "j [Array<String>] join a set of relations (optional)"
+    }
     # [Hash: param_key_string => param_types_array]
     class_attribute :params_types
     self.params_types = {}
+    params_types['f'] = [String]
+    params_types['j'] = [Array]
     
     helper_method :subject_collection
   
@@ -23,7 +31,7 @@ module Apique::Listable
   
   # Exception will raise if a request query would contain an incorrect of malformed parameter.
   # This will provide the front-end with a description of the correct API usage.
-  class Apique::MalformedParameters < Exception
+  class ::Apique::MalformedParameters < Exception
     
     def initialize(request, param, params_usage, *args)
       message = "Bad request query: malformed parameter #{param}"
@@ -48,6 +56,7 @@ module Apique::Listable
   
   # GET /api/{plural_resource_name}
   def index
+    join_relations!
     if respond_to? :filter_collection!, true
       filter_collection!
     end
@@ -57,7 +66,7 @@ module Apique::Listable
     if respond_to? :paginate_collection!, true
       paginate_collection!
     end
-    render json: subject_collection
+    render json: subject_collection, apique_format: params[:f] || 'default'
   end
   
   
@@ -84,6 +93,13 @@ module Apique::Listable
   
   ### Whitelists ###
   
+  # @virtual
+  # Pattern method for relations a user can join. Add whitelisting logic in a descendant using `super`.
+  # @return [ActionController::Parameters]
+  def join_params
+    params[:j].presence || ActionController::Parameters.new
+  end
+  
   # Check consistency of a query parameters for a list. Use it as a before filter if needed.
   # @raise [MalformedParameters] if the request query is malformed.
   def validate_query
@@ -98,6 +114,21 @@ module Apique::Listable
         raise MalformedParameters.new(request, k, self.class.params_usage)
       end
     end
+  end
+  
+  
+  ### Collection filters ###
+  
+  # Join (eager load) to the current collection the references specified by params[:j]
+  # @return [DB collection proxy]
+  def join_relations!
+    collection = get_collection
+    
+    if join_params.present?
+      collection = collection.includes(*join_params)
+    end
+    
+    set_collection collection
   end
   
 end
