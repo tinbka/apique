@@ -41,13 +41,13 @@ module Apique::Basics
   # The plural name of the ORM class.
   # @return [String]
   def collection_name
-    @collection_name ||= params[:model] || controller_name.underscore.split('/').last
+    @collection_name ||= params[:model] || controller_name.underscore.tr('/', '~')
   end
 
   # The ORM class of the resource.
   # @return [Class]
   def resource_class
-    @resource_class ||= collection_name.singularize.classify.constantize
+    @resource_class ||= collection_name.singularize.tr('~', '/').classify.constantize
   end
   
 end

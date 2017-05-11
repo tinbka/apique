@@ -73,11 +73,17 @@ module Apique::Listable
   private
   
   ### Basic getters-setters ###
+  
+  # The name of ivar to cache the filtered collection.
+  # @return [String]
+  def collection_variable_name
+    @collection_variable_name ||= "@#{collection_name.tr('~', '_')}"
+  end
 
   # Returns the collection from the created instance variable.
   # @return [DB collection proxy]
   def get_collection
-    instance_variable_get("@#{collection_name}") || set_collection
+    instance_variable_get(collection_variable_name) || set_collection
   end
   
   # Used as a helper to create DRYed json builders in inheritable controllers.
@@ -87,7 +93,7 @@ module Apique::Listable
   # In most cases, the collection exactly allowed for the user by CanCan rules should be an entry point.
   # @return [DB collection proxy]
   def set_collection(collection = defined?(CanCan) ? resource_class.accessible_by(current_ability) : resource_class.all)
-    instance_variable_set("@#{collection_name}", collection)
+    instance_variable_set(collection_variable_name, collection)
   end
   
   

@@ -31,11 +31,17 @@ module Apique::Pickable
   def resource_name
     @resource_name ||= collection_name.singularize
   end
+  
+  # The name of ivar to cache the picked resource.
+  # @return [String]
+  def resource_variable_name
+    @resource_variable_name ||= "@#{resource_name.tr('~', '_')}"
+  end
 
   # Returns the resource from the created instance variable.
   # @return [Object]
   def get_resource
-    instance_variable_get("@#{resource_name}") || set_resource
+    instance_variable_get(resource_variable_name) || set_resource
   end
   
   # Used as a helper to create DRYed json builders in inheritable controllers.
@@ -50,7 +56,7 @@ module Apique::Pickable
       raise RecordNotFound, "could not find a record of type #{resource_class} with id = #{params[:id]}"
     end
     
-    instance_variable_set("@#{resource_name}", resource)
+    instance_variable_set(resource_variable_name, resource)
   end
   
 end
