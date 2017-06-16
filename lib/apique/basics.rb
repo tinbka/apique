@@ -3,8 +3,6 @@ module Apique::Basics
   extend ActiveSupport::Concern
   
   included do
-    protect_from_forgery with: :null_session
-  
     before_action :authorize_access
     
     if defined? CanCan
