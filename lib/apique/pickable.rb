@@ -48,7 +48,7 @@ module Apique::Pickable
   alias_method :subject_resource, :get_resource
 
   # Puts the resource into an instance variable.
-  # @raise [ActionController::RoutingError] if there is no resource found.
+  # @raise [Apique::RecordNotFound] if there is no resource found.
   # @return [Object]
   def set_resource(resource = nil)
     resource ||= resource_class.find(params[:id])
