@@ -127,17 +127,27 @@ module Apique::Filterable
     end
   end
   
+  if ActiveRecord::VERSION::MAJOR >= 5 and ActiveRecord::VERSION::MINOR >= 1
+    def text_type_class?(type_class)
+      type_class <= ActiveModel::Type::String
+    end
+  else
+    def text_type_class?(type_class)
+      [ActiveModel::Type::String, ActiveModel::Type::Text].find {|k| type_class <= k}
+    end
+  end
+  
   def get_cast_type(field)
-    type = get_cast_type_class(field)
-    if [ActiveModel::Type::String, ActiveModel::Type::Text].find {|k| type <= k}
+    type_class = get_cast_type_class(field)
+    if text_type_class?(type_class)
       :text
-    elsif type <= ActiveModel::Type::Integer
+    elsif type_class <= ActiveModel::Type::Integer
       :integer
-    elsif type <= ActiveModel::Type::Boolean
+    elsif type_class <= ActiveModel::Type::Boolean
       :boolean
-    elsif type <= ActiveModel::Type::DateTime
+    elsif type_class <= ActiveModel::Type::DateTime
       :datetime
-    elsif type <= ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Uuid
+    elsif type_class <= ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Uuid
       :uuid
     end
   end
