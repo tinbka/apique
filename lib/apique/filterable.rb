@@ -2,7 +2,7 @@
 module Apique::Filterable
   extend ActiveSupport::Concern
   include Apique::Listable
-  
+
   included do
     params_usage['q'] = {
       desc: "q [String] filter by a value of a default field (optional)",
@@ -14,35 +14,35 @@ module Apique::Filterable
     }
     params_types['q'] = [String, Hash]
   end
-  
+
   UUID_RE = /^[a-f\d]{8}(-[a-f\d]{4}){3}-[a-f\d]{12}$/
   BOOL_RE = /^(true|false|t|f)$/
   ISO8601_RE = /^\d{4}(-\d\d){2}T\d\d(:\d\d){2}(\.\d+)?Z([+-]\d\d:\d\d)?$/
-  
+
   private
-  
+
   ### Basic getters-setters ###
-  
+
   # @abstract
   # Filter by this column implicitly when q=value is passed. Supports field_or_field2 notation.
   # @return [String]
   def default_filter_column
     raise NotImplementedError, "A developer must implement default_filter_column for this controller to allow plain `q' query parameter."
   end
-  
-  
+
+
   ### Whitelists ###
-  
+
   # @virtual
   # Pattern method for params a user can filter by. Add whitelisting logic in a descendant using `super`.
   # @return [ActionController::Parameters]
   def filter_params
     params[:q].presence || ActionController::Parameters.new
   end
-  
-  
+
+
   ### Collection filters ###
-  
+
   # Filter the current collection with {column_or_scope => value, ... } Hash within params[:q]
   # @return [DB collection proxy]
   def filter_collection!
@@ -50,20 +50,20 @@ module Apique::Filterable
       params[:q] = {default_filter_column => params[:q]}
       return filter_collection!
     end
-    
+
     if filter_params.present?
       collection = get_collection
-        
+
       filter_params.each do |k, v|
         next if v.blank?
-          
+
         if resource_class.respond_to? "search_by_#{k}"
           # A call to a scope. A method must be defined as a scope to work on another ORM relation.
           collection = collection.public_send "search_by_#{k}", v
         else
           conditions = k.split('_or_').map do |k|
             case get_cast_type(k)
-            when :text
+            when :string
               if v.is_a? Array
                 ["#{k} IN (?)", v.select(&:present?)]
               else
@@ -103,20 +103,20 @@ module Apique::Filterable
               from_to_statement(k, v)
             end
           end.compact
-          
+
           if conditions.blank?
             collection = collection.none
             break
           end
-          
+
           collection = collection.where conditions.map(&:first)*' OR ', *conditions.map(&:last)
         end
       end
-      
+
       set_collection collection
     end
   end
-  
+
   if ActiveRecord::VERSION::MAJOR >= 5
     def get_cast_type_class(field)
       resource_class.columns.find {|i| i.name == field}.instance_variable_get(:@cast_type).class
@@ -126,7 +126,7 @@ module Apique::Filterable
       resource_class.columns.find {|i| i.name == field}.cast_type
     end
   end
-  
+
   if ActiveRecord::VERSION::MAJOR >= 5 and ActiveRecord::VERSION::MINOR >= 1
     def text_type_class?(type_class)
       type_class <= ActiveModel::Type::String
@@ -136,22 +136,28 @@ module Apique::Filterable
       [ActiveModel::Type::String, ActiveModel::Type::Text].find {|k| type_class <= k}
     end
   end
-  
-  def get_cast_type(field)
-    type_class = get_cast_type_class(field)
-    if text_type_class?(type_class)
-      :text
-    elsif type_class <= ActiveModel::Type::Integer
-      :integer
-    elsif type_class <= ActiveModel::Type::Boolean
-      :boolean
-    elsif type_class <= ActiveModel::Type::DateTime
-      :datetime
-    elsif type_class <= ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Uuid
-      :uuid
+
+  if ActiveRecord::VERSION::MAJOR >= 6
+    def get_cast_type(field)
+      resource_class.columns.find {|i| i.name == field}.type
+    end
+  else
+    def get_cast_type(field)
+      type_class = get_cast_type_class(field)
+      if text_type_class?(type_class)
+        :string
+      elsif type_class <= ActiveModel::Type::Integer
+        :integer
+      elsif type_class <= ActiveModel::Type::Boolean
+        :boolean
+      elsif type_class <= ActiveModel::Type::DateTime
+        :datetime
+      elsif type_class <= ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Uuid
+        :uuid
+      end
     end
   end
-  
+
   def from_to_statement(k, v)
     if v[:from].present? and v[:to].present?
       ["#{k} BETWEEN ? AND ?", v[:from], v[:to]]
@@ -161,5 +167,5 @@ module Apique::Filterable
       ["#{k} <= ?", v[:to]]
     end
   end
-  
+
 end
